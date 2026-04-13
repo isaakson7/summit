@@ -1,0 +1,228 @@
+/*
+ * ZIGChain Summit 2026 — Reddit Outreach Intelligence Dashboard
+ * Design Philosophy: "Onchain Intelligence Brief"
+ * Brand Colors: Violet (#4E30C6) → Emerald (#05D9A0) gradient with premium accents
+ * Typography: Playfair Display (headings) + DM Sans (body) + DM Mono (data/code)
+ */
+
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+  
+  /* Custom ZIGChain brand tokens */
+  --font-display: 'Playfair Display', Georgia, serif;
+  --font-body: 'DM Sans', system-ui, sans-serif;
+  --font-mono: 'DM Mono', 'Courier New', monospace;
+  
+  /* ZIGChain Official Brand Colors */
+  --zig-emerald: #05D9A0;
+  --zig-teal: #379C82;
+  --zig-violet: #4E30C6;
+  --zig-purple: #856DDE;
+  --zig-lilac: #AB8BE5;
+  --zig-white: #FFFFFF;
+}
+
+:root {
+  --radius: 0.5rem;
+  
+  /* Dark background with gradient overlay support */
+  --background: #0a0e1a;
+  --foreground: #FFFFFF;
+  --card: #1a1f35;
+  --card-foreground: #FFFFFF;
+  --popover: #1a1f35;
+  --popover-foreground: #FFFFFF;
+  
+  /* Primary: Emerald accent */
+  --primary: #05D9A0;
+  --primary-foreground: #0a0e1a;
+  
+  /* Secondary: Violet base */
+  --secondary: #4E30C6;
+  --secondary-foreground: #FFFFFF;
+  
+  /* Muted: Purple tones */
+  --muted: #2a2545;
+  --muted-foreground: #AB8BE5;
+  
+  /* Accent: Emerald */
+  --accent: #05D9A0;
+  --accent-foreground: #0a0e1a;
+  
+  /* Destructive */
+  --destructive: #ff4444;
+  --destructive-foreground: #FFFFFF;
+  
+  /* Border & Input */
+  --border: rgba(5, 217, 160, 0.15);
+  --input: rgba(5, 217, 160, 0.08);
+  --ring: #05D9A0;
+  
+  /* Chart colors: Gradient palette */
+  --chart-1: #05D9A0;
+  --chart-2: #379C82;
+  --chart-3: #4E30C6;
+  --chart-4: #856DDE;
+  --chart-5: #AB8BE5;
+  
+  /* Sidebar */
+  --sidebar: #1a1f35;
+  --sidebar-foreground: #FFFFFF;
+  --sidebar-primary: #05D9A0;
+  --sidebar-primary-foreground: #0a0e1a;
+  --sidebar-accent: #4E30C6;
+  --sidebar-accent-foreground: #FFFFFF;
+  --sidebar-border: rgba(5, 217, 160, 0.15);
+  --sidebar-ring: #05D9A0;
+}
+
+.dark {
+  --background: #0a0e1a;
+  --foreground: #FFFFFF;
+  --card: #1a1f35;
+  --card-foreground: #FFFFFF;
+  --popover: #1a1f35;
+  --popover-foreground: #FFFFFF;
+  --primary: #05D9A0;
+  --primary-foreground: #0a0e1a;
+  --secondary: #4E30C6;
+  --secondary-foreground: #FFFFFF;
+  --muted: #2a2545;
+  --muted-foreground: #AB8BE5;
+  --accent: #05D9A0;
+  --accent-foreground: #0a0e1a;
+  --destructive: #ff4444;
+  --destructive-foreground: #FFFFFF;
+  --border: rgba(5, 217, 160, 0.15);
+  --input: rgba(5, 217, 160, 0.08);
+  --ring: #05D9A0;
+  --chart-1: #05D9A0;
+  --chart-2: #379C82;
+  --chart-3: #4E30C6;
+  --chart-4: #856DDE;
+  --chart-5: #AB8BE5;
+  --sidebar: #1a1f35;
+  --sidebar-foreground: #FFFFFF;
+  --sidebar-primary: #05D9A0;
+  --sidebar-primary-foreground: #0a0e1a;
+  --sidebar-accent: #4E30C6;
+  --sidebar-accent-foreground: #FFFFFF;
+  --sidebar-border: rgba(5, 217, 160, 0.15);
+  --sidebar-ring: #05D9A0;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  [type="button"]:not(:disabled),
+  [type="submit"]:not(:disabled),
+  [type="reset"]:not(:disabled),
+  a[href],
+  select:not(:disabled),
+  input[type="checkbox"]:not(:disabled),
+  input[type="radio"]:not(:disabled) {
+    @apply cursor-pointer;
+  }
+}
+
+@layer components {
+  /**
+   * Custom container utility that centers content and adds responsive padding.
+   */
+  .container {
+    width: 100%;
+    margin-left: auto;
+    margin-right: auto;
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+
+  .flex {
+    min-height: 0;
+    min-width: 0;
+  }
+
+  @media (min-width: 640px) {
+    .container {
+      padding-left: 1.5rem;
+      padding-right: 1.5rem;
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .container {
+      padding-left: 2rem;
+      padding-right: 2rem;
+      max-width: 1280px;
+    }
+  }
+
+  /* ZIGChain gradient utility */
+  .gradient-zig {
+    background: linear-gradient(135deg, #4E30C6, #05D9A0);
+  }
+
+  /* Emerald accent text */
+  .text-zig-emerald {
+    color: #05D9A0;
+  }
+
+  /* Violet base */
+  .text-zig-violet {
+    color: #4E30C6;
+  }
+
+  /* Gradient text */
+  .gradient-text {
+    background: linear-gradient(135deg, #4E30C6, #05D9A0);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+}
