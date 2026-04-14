@@ -56,14 +56,20 @@ function parseRedditUrl(url: string): { subreddit: string; postId: string } | nu
 }
 
 async function fetchRedditPost(subreddit: string, postId: string): Promise<any> {
-  // Try two URL formats for better reliability
-  const urls = [
-    `https://www.reddit.com/r/${subreddit}/comments/${postId}.json`,
-    `https://reddit.com/r/${subreddit}/comments/${postId}.json`,
+  const redditUrl = `https://www.reddit.com/r/${subreddit}/comments/${postId}.json`;
+
+  const attempts = [
+    // Direct
+    () => fetch(redditUrl),
+    // CORS proxy 1
+    () => fetch(`https://corsproxy.io/?${encodeURIComponent(redditUrl)}`),
+    // CORS proxy 2
+    () => fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(redditUrl)}`),
   ];
-  for (const url of urls) {
+
+  for (const attempt of attempts) {
     try {
-      const res = await fetch(url);
+      const res = await attempt();
       if (!res.ok) continue;
       const data = await res.json();
       return data[0].data.children[0].data;
@@ -71,7 +77,8 @@ async function fetchRedditPost(subreddit: string, postId: string): Promise<any> 
       continue;
     }
   }
-  throw new Error("Could not reach Reddit. Please try again in a moment.");
+
+  throw new Error("Could not reach Reddit after multiple attempts. Please try again in a moment.");
 }
 
 function formatAge(createdUtc: number): { age: string; ageHours: number } {
