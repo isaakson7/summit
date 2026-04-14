@@ -146,20 +146,28 @@ interface ClaudeAnalysis {
 
 async function analyzeWithClaude(post: any, apiKey: string): Promise<ClaudeAnalysis> {
   const hasBody = post.selftext && post.selftext.length > 20;
-  const prompt = `You are an outreach intelligence assistant for ZIGChain Summit 2026 — a one-day summit on April 28, 2026 in Dubai, UAE. The summit is focused on onchain capital, tokenized real-world assets (RWA), institutional DeFi infrastructure, and wealth at scale. Key speakers include executives from Swissquote MEA, Apex Group, Taurus Group, and Laser Digital. The official site is https://summit.zigchain.com/2026 and a free virtual pass is available.
+  const prompt = `You are ghostwriting a Reddit reply on behalf of someone who is genuinely interested in the topic being discussed. This person happens to be attending ZIGChain Summit 2026 — a one-day event on April 28, 2026 in Dubai, UAE focused on onchain capital, tokenized real-world assets (RWA), institutional DeFi, and wealth at scale. Speakers include executives from Swissquote MEA, Apex Group, Taurus Group, and Laser Digital. Free virtual pass at https://summit.zigchain.com/2026.
 
-Analyze this Reddit post and generate outreach intelligence. ${!hasBody ? "Note: only the title is available — infer context from the title and subreddit." : ""}
+The reply must feel like a real person genuinely engaging with the thread — sharing their honest take, adding something useful to the conversation, and then naturally mentioning the summit as something they're personally looking forward to because it will cover exactly these topics. It should never feel like a promotion or advertisement.
 
+Reddit post to reply to:
 Subreddit: ${post.subreddit_name_prefixed ?? "r/" + post.subreddit}
 Title: ${post.title}
-Body: ${hasBody ? post.selftext.slice(0, 1500) : "(no body text — link post or unavailable)"}
+Body: ${hasBody ? post.selftext.slice(0, 1500) : "(link post — no body text)"}
 Upvotes: ${post.score ?? 0} | Comments: ${post.num_comments ?? 0}
 
-Respond with ONLY a raw JSON object (no markdown, no code fences) with these exact fields:
+Rules for the reply:
+- Open by engaging directly with the post's actual argument or question — no "great post", no generic openers
+- Share a genuine, informed opinion or observation on the topic
+- Mention ZIGChain Summit 2026 casually, as something the writer is personally attending or watching, not as a recommendation or ad
+- Keep it conversational and human — like a Reddit comment, not a LinkedIn post
+- 4-6 sentences max
+
+Respond with ONLY a raw JSON object (no markdown, no code fences):
 {
-  "context": "2-3 sentences describing what this post/thread is about and what discussion it likely contains, based on the title and subreddit",
-  "opportunity": "1-2 sentences explaining specifically how ZIGChain Summit 2026 is relevant to this thread and community",
-  "suggestedReply": "A natural, thoughtful Reddit reply (4-6 sentences) that first contributes something genuinely useful to the conversation based on the topic, then organically mentions ZIGChain Summit 2026 as relevant context. Never start with 'Great post' or generic openers. Sound like a knowledgeable community member, not a marketer.",
+  "context": "2-3 sentences summarising what this thread is about and what the community is discussing",
+  "opportunity": "1-2 sentences on why this thread is a good fit for a casual ZIGChain Summit mention",
+  "suggestedReply": "the reply text",
   "engagementPotential": "High" or "Moderate" or "Medium",
   "relevanceScore": a number from 1 to 10
 }`;
