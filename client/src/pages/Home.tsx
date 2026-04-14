@@ -117,6 +117,58 @@ function buildConversationFromPost(post: any, url: string): RedditConversation {
   };
 }
 
+interface ClaudeAnalysis {
+  context: string;
+  opportunity: string;
+  suggestedReply: string;
+  engagementPotential: "High" | "Moderate" | "Medium";
+  relevanceScore: number;
+}
+
+async function analyzeWithClaude(post: any, apiKey: string): Promise<ClaudeAnalysis> {
+  const prompt = `You are an outreach intelligence assistant for ZIGChain Summit 2026 — a one-day summit on April 28, 2026 in Dubai, UAE. The summit is focused on onchain capital, tokenized real-world assets (RWA), institutional DeFi infrastructure, and wealth at scale. Key speakers include executives from Swissquote MEA, Apex Group, Taurus Group, and Laser Digital. The official site is https://summit.zigchain.com/2026 and a free virtual pass is available.
+
+Analyze this Reddit post and generate outreach intelligence:
+
+Subreddit: ${post.subreddit_name_prefixed ?? "r/" + post.subreddit}
+Title: ${post.title}
+Body: ${post.selftext ? post.selftext.slice(0, 1500) : "(link post — no body text)"}
+Upvotes: ${post.score ?? 0} | Comments: ${post.num_comments ?? 0}
+
+Respond with ONLY a raw JSON object (no markdown, no code fences) with these exact fields:
+{
+  "context": "2-3 sentence summary of what the post is about and what the community is discussing",
+  "opportunity": "1-2 sentences explaining specifically why ZIGChain Summit 2026 is relevant to this thread",
+  "suggestedReply": "A natural, thoughtful Reddit reply that first adds genuine value to the conversation, then organically mentions ZIGChain Summit 2026. Should feel like a knowledgeable community member, not a marketer. 3-5 sentences.",
+  "engagementPotential": "High" or "Moderate" or "Medium",
+  "relevanceScore": a number from 1 to 10
+}`;
+
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+      "anthropic-dangerous-direct-browser-access": "true",
+    },
+    body: JSON.stringify({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 1024,
+      messages: [{ role: "user", content: prompt }],
+    }),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error((err as any).error?.message ?? `API error ${res.status}`);
+  }
+
+  const data = await res.json();
+  const text: string = data.content[0].text;
+  return JSON.parse(text) as ClaudeAnalysis;
+}
+
 function buildConversationFromUrl(url: string, parsed: { subreddit: string; postId: string }): RedditConversation {
   const slug = url.split("/").filter(Boolean).pop() ?? "";
   const title = slug.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase()) || `Thread from r/${parsed.subreddit}`;
@@ -578,8 +630,16 @@ function ArchiveSidebar({
 function AddConversationForm({ onAdd }: { onAdd: (conv: RedditConversation) => void }) {
   const [url, setUrl] = useState("");
   const [loading, setLoading] = useState(false);
+  const [loadingMsg, setLoadingMsg] = useState("");
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
+  const [apiKey, setApiKey] = useState(() => localStorage.getItem("zigchain-claude-key") ?? "");
+  const [showKey, setShowKey] = useState(false);
+
+  const saveApiKey = (val: string) => {
+    setApiKey(val);
+    localStorage.setItem("zigchain-claude-key", val);
+  };
 
   const handleAdd = async () => {
     setError("");
@@ -588,29 +648,80 @@ function AddConversationForm({ onAdd }: { onAdd: (conv: RedditConversation) => v
     if (!trimmed) { setError("Please paste a Reddit URL."); return; }
     const parsed = parseRedditUrl(trimmed);
     if (!parsed) { setError("Please paste a valid Reddit thread URL (reddit.com/r/.../comments/...)."); return; }
+
     setLoading(true);
     try {
-      const post = await fetchRedditPost(parsed.subreddit, parsed.postId);
-      onAdd(buildConversationFromPost(post, trimmed));
-    } catch {
-      onAdd(buildConversationFromUrl(trimmed, parsed));
-    } finally {
-      setLoading(false);
+      setLoadingMsg("Fetching post…");
+      let post: any;
+      try {
+        post = await fetchRedditPost(parsed.subreddit, parsed.postId);
+      } catch {
+        onAdd(buildConversationFromUrl(trimmed, parsed));
+        setUrl("");
+        setSuccess(true);
+        setTimeout(() => setSuccess(false), 3000);
+        return;
+      }
+
+      if (apiKey.trim()) {
+        setLoadingMsg("Analyzing with Claude…");
+        try {
+          const analysis = await analyzeWithClaude(post, apiKey.trim());
+          const { age, ageHours } = formatAge(post.created_utc);
+          const { category, categoryColor } = detectCategory(post.subreddit ?? "", post.title ?? "");
+          onAdd({
+            id: Date.now(),
+            subreddit: post.subreddit_name_prefixed ?? `r/${post.subreddit}`,
+            title: post.title,
+            url: trimmed,
+            age,
+            ageHours,
+            category,
+            categoryColor,
+            relevanceScore: Math.min(10, Math.max(1, Math.round(analysis.relevanceScore))),
+            context: analysis.context,
+            opportunity: analysis.opportunity,
+            suggestedReply: analysis.suggestedReply,
+            engagementPotential: analysis.engagementPotential,
+            userAdded: true,
+          });
+        } catch (aiErr: any) {
+          setError(`Claude API error: ${aiErr.message}. Card added with basic analysis.`);
+          onAdd(buildConversationFromPost(post, trimmed));
+        }
+      } else {
+        onAdd(buildConversationFromPost(post, trimmed));
+      }
+
       setUrl("");
       setSuccess(true);
       setTimeout(() => setSuccess(false), 3000);
+    } finally {
+      setLoading(false);
+      setLoadingMsg("");
     }
   };
 
+  const hasKey = apiKey.trim().length > 0;
+
   return (
-    <div className="bg-white border border-[#4E30C6]/10 rounded-xl p-4 shadow-sm">
-      <div className="flex items-center gap-2 mb-3">
+    <div className="bg-white border border-[#4E30C6]/10 rounded-xl p-4 shadow-sm space-y-3">
+      {/* Header */}
+      <div className="flex items-center gap-2">
         <div className="p-1.5 rounded-lg bg-[#4E30C6]/10">
           <Plus size={14} className="text-[#4E30C6]" />
         </div>
         <h3 className="font-display text-sm font-semibold text-[#1a1f35]">Add a Conversation</h3>
-        <span className="text-xs text-[#9CA3AF] ml-1">Paste a Reddit thread URL to generate a card</span>
+        <span className={`ml-auto inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border ${
+          hasKey
+            ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+            : "bg-[#4E30C6]/5 text-[#4E30C6]/60 border-[#4E30C6]/15"
+        }`}>
+          {hasKey ? "⚡ AI-powered" : "Template-based"}
+        </span>
       </div>
+
+      {/* URL input */}
       <div className="flex gap-2">
         <input
           type="url"
@@ -623,14 +734,41 @@ function AddConversationForm({ onAdd }: { onAdd: (conv: RedditConversation) => v
         <button
           onClick={handleAdd}
           disabled={loading}
-          className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#4E30C6] text-white text-sm font-medium hover:bg-[#3D25A8] disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+          className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#4E30C6] text-white text-sm font-medium hover:bg-[#3D25A8] disabled:opacity-60 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
         >
           {loading ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
-          {loading ? "Fetching…" : "Add"}
+          {loading ? loadingMsg : "Add"}
         </button>
       </div>
-      {error && <p className="text-red-500 text-xs mt-2">{error}</p>}
-      {success && <p className="text-emerald-600 text-xs mt-2">✓ Conversation added successfully!</p>}
+
+      {/* Claude API key */}
+      <div className="flex items-center gap-2 p-3 rounded-lg bg-[#F8F7FF] border border-[#4E30C6]/10">
+        <span className="text-xs text-[#4E30C6] font-medium whitespace-nowrap">⚡ Claude API Key</span>
+        <input
+          type={showKey ? "text" : "password"}
+          placeholder="sk-ant-… (stored only in your browser)"
+          value={apiKey}
+          onChange={(e) => saveApiKey(e.target.value)}
+          className="flex-1 px-2 py-1 text-xs rounded border border-[#4E30C6]/15 bg-white text-[#1a1f35] placeholder-[#9CA3AF] focus:outline-none focus:border-[#4E30C6]/30 font-mono-custom"
+        />
+        <button
+          onClick={() => setShowKey((v) => !v)}
+          className="text-xs text-[#9CA3AF] hover:text-[#4E30C6] transition-colors whitespace-nowrap"
+        >
+          {showKey ? "Hide" : "Show"}
+        </button>
+        <a
+          href="https://console.anthropic.com/settings/keys"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-xs text-[#4E30C6]/60 hover:text-[#4E30C6] transition-colors whitespace-nowrap"
+        >
+          Get key ↗
+        </a>
+      </div>
+
+      {error && <p className="text-red-500 text-xs">{error}</p>}
+      {success && <p className="text-emerald-600 text-xs">✓ Conversation added successfully!</p>}
     </div>
   );
 }
