@@ -186,7 +186,9 @@ Respond with ONLY a raw JSON object (no markdown, no code fences) with these exa
 
   const data = await res.json();
   const text: string = data.content[0].text;
-  return JSON.parse(text) as ClaudeAnalysis;
+  // Strip markdown code fences if Claude wraps the response
+  const cleaned = text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
+  return JSON.parse(cleaned) as ClaudeAnalysis;
 }
 
 function buildConversationFromUrl(url: string, parsed: { subreddit: string; postId: string }): RedditConversation {
