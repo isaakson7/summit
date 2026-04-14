@@ -56,10 +56,22 @@ function parseRedditUrl(url: string): { subreddit: string; postId: string } | nu
 }
 
 async function fetchRedditPost(subreddit: string, postId: string): Promise<any> {
-  const res = await fetch(`https://www.reddit.com/r/${subreddit}/comments/${postId}.json`);
-  if (!res.ok) throw new Error("Failed to fetch");
-  const data = await res.json();
-  return data[0].data.children[0].data;
+  // Try two URL formats for better reliability
+  const urls = [
+    `https://www.reddit.com/r/${subreddit}/comments/${postId}.json`,
+    `https://reddit.com/r/${subreddit}/comments/${postId}.json`,
+  ];
+  for (const url of urls) {
+    try {
+      const res = await fetch(url);
+      if (!res.ok) continue;
+      const data = await res.json();
+      return data[0].data.children[0].data;
+    } catch {
+      continue;
+    }
+  }
+  throw new Error("Could not reach Reddit. Please try again in a moment.");
 }
 
 function formatAge(createdUtc: number): { age: string; ageHours: number } {
@@ -652,45 +664,27 @@ function AddConversationForm({ onAdd }: { onAdd: (conv: RedditConversation) => v
 
     setLoading(true);
     try {
-      // Try to fetch Reddit post — but don't bail if it fails
+      // Step 1: fetch Reddit post — abort if it fails (no point calling Claude without real data)
       setLoadingMsg("Fetching post…");
-      let post: any = null;
+      let post: any;
       try {
         post = await fetchRedditPost(parsed.subreddit, parsed.postId);
-      } catch {
-        // CORS or network issue — we'll work with URL data only
+      } catch (fetchErr: any) {
+        setError(fetchErr.message ?? "Could not reach Reddit. Please try again.");
+        return;
       }
 
+      // Step 2: analyze with Claude (only if API key set) or fall back to template
       if (apiKey.trim()) {
-        // Always call Claude when API key is set, even if Reddit fetch failed.
-        // Build a best-effort post object from whatever we have.
-        const slugTitle = parsed.postId
-          ? (trimmed.split("/").filter(Boolean).pop() ?? "").replace(/_/g, " ")
-          : "";
-        const postData = post ?? {
-          title: slugTitle || `Thread from r/${parsed.subreddit}`,
-          selftext: "",
-          subreddit: parsed.subreddit,
-          subreddit_name_prefixed: `r/${parsed.subreddit}`,
-          score: 0,
-          num_comments: 0,
-          created_utc: Date.now() / 1000,
-        };
-
         setLoadingMsg("Analyzing with Claude…");
         try {
-          const analysis = await analyzeWithClaude(postData, apiKey.trim());
-          const { age, ageHours } = post
-            ? formatAge(post.created_utc)
-            : { age: "recently added", ageHours: 0 };
-          const { category, categoryColor } = detectCategory(
-            postData.subreddit ?? "",
-            postData.title ?? ""
-          );
+          const analysis = await analyzeWithClaude(post, apiKey.trim());
+          const { age, ageHours } = formatAge(post.created_utc);
+          const { category, categoryColor } = detectCategory(post.subreddit ?? "", post.title ?? "");
           onAdd({
             id: Date.now(),
-            subreddit: postData.subreddit_name_prefixed ?? `r/${postData.subreddit}`,
-            title: postData.title,
+            subreddit: post.subreddit_name_prefixed ?? `r/${post.subreddit}`,
+            title: post.title,
             url: trimmed,
             age,
             ageHours,
@@ -705,11 +699,10 @@ function AddConversationForm({ onAdd }: { onAdd: (conv: RedditConversation) => v
           });
         } catch (aiErr: any) {
           setError(`Claude API error: ${aiErr.message}. Card added with basic analysis.`);
-          onAdd(post ? buildConversationFromPost(post, trimmed) : buildConversationFromUrl(trimmed, parsed));
+          onAdd(buildConversationFromPost(post, trimmed));
         }
       } else {
-        // No API key — use template
-        onAdd(post ? buildConversationFromPost(post, trimmed) : buildConversationFromUrl(trimmed, parsed));
+        onAdd(buildConversationFromPost(post, trimmed));
       }
 
       setUrl("");
