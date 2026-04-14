@@ -15,6 +15,7 @@ export interface RedditConversation {
   opportunity: string;
   suggestedReply: string;
   engagementPotential: "High" | "Medium" | "Moderate";
+  userAdded?: boolean;
 }
 
 export const summitInfo = {
@@ -282,17 +283,17 @@ More info and free virtual pass: https://summit.zigchain.com/2026`,
 ];
 
 export const categoryColors: Record<string, string> = {
-  teal: "bg-teal-500/20 text-teal-300 border-teal-500/30",
-  amber: "bg-amber-500/20 text-amber-300 border-amber-500/30",
-  blue: "bg-blue-500/20 text-blue-300 border-blue-500/30",
-  purple: "bg-purple-500/20 text-purple-300 border-purple-500/30",
-  green: "bg-emerald-500/20 text-emerald-300 border-emerald-500/30",
+  teal: "bg-teal-50 text-teal-700 border-teal-200",
+  amber: "bg-amber-50 text-amber-700 border-amber-200",
+  blue: "bg-blue-50 text-blue-700 border-blue-200",
+  purple: "bg-purple-50 text-purple-700 border-purple-200",
+  green: "bg-emerald-50 text-emerald-700 border-emerald-200",
 };
 
 export const engagementColors: Record<string, string> = {
-  High: "bg-emerald-500/20 text-emerald-300 border-emerald-500/30",
-  Medium: "bg-amber-500/20 text-amber-300 border-amber-500/30",
-  Moderate: "bg-slate-500/20 text-slate-300 border-slate-500/30",
+  High: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  Medium: "bg-amber-50 text-amber-700 border-amber-200",
+  Moderate: "bg-slate-100 text-slate-600 border-slate-200",
 };
 
 export const categories = [

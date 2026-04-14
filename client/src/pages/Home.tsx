@@ -43,7 +43,101 @@ import {
   Circle,
   Archive,
   RotateCcw,
+  Plus,
+  Loader2,
 } from "lucide-react";
+
+// ─── Helpers for user-added conversations ────────────────────────────────────
+
+function parseRedditUrl(url: string): { subreddit: string; postId: string } | null {
+  const match = url.match(/reddit\.com\/r\/([^/]+)\/comments\/([a-zA-Z0-9]+)/);
+  if (!match) return null;
+  return { subreddit: match[1], postId: match[2] };
+}
+
+async function fetchRedditPost(subreddit: string, postId: string): Promise<any> {
+  const res = await fetch(`https://www.reddit.com/r/${subreddit}/comments/${postId}.json`);
+  if (!res.ok) throw new Error("Failed to fetch");
+  const data = await res.json();
+  return data[0].data.children[0].data;
+}
+
+function formatAge(createdUtc: number): { age: string; ageHours: number } {
+  const ageHours = (Date.now() - createdUtc * 1000) / 3_600_000;
+  let age: string;
+  if (ageHours < 1) age = "just now";
+  else if (ageHours < 24) age = `${Math.floor(ageHours)} hours ago`;
+  else {
+    const days = Math.floor(ageHours / 24);
+    age = days === 1 ? "1 day ago" : `${days} days ago`;
+  }
+  return { age, ageHours };
+}
+
+function detectCategory(subreddit: string, title: string): { category: string; categoryColor: string } {
+  const text = (subreddit + " " + title).toLowerCase();
+  if (/event|conference|summit|meetup/.test(text)) return { category: "Events & Conferences", categoryColor: "teal" };
+  if (/dubai|uae|middle.east|gulf/.test(text)) return { category: "Dubai & UAE", categoryColor: "green" };
+  if (/institutional|fund|asset.manag|blackrock/.test(text)) return { category: "Institutional Finance", categoryColor: "purple" };
+  if (/defi|onchain|yield|liquidity|protocol|decentralized/.test(text)) return { category: "DeFi & Onchain Finance", categoryColor: "blue" };
+  return { category: "Tokenization & RWA", categoryColor: "amber" };
+}
+
+function buildConversationFromPost(post: any, url: string): RedditConversation {
+  const { age, ageHours } = formatAge(post.created_utc);
+  const { category, categoryColor } = detectCategory(post.subreddit || "", post.title || "");
+  const score: number = post.score ?? 0;
+  const numComments: number = post.num_comments ?? 0;
+  const engagementPotential: "High" | "Moderate" | "Medium" =
+    score > 100 || numComments > 50 ? "High" : score > 20 || numComments > 10 ? "Moderate" : "Medium";
+  const keywords = ["defi","blockchain","crypto","web3","zigchain","token","rwa","asset","finance","fund","institutional","summit","dubai","onchain"];
+  const blob = (post.title + " " + (post.selftext ?? "") + " " + (post.subreddit ?? "")).toLowerCase();
+  const hits = keywords.filter((k) => blob.includes(k)).length;
+  const relevanceScore = Math.min(10, Math.max(3, Math.round(hits * 1.2 + 3)));
+  const subredditLabel = post.subreddit_name_prefixed ?? `r/${post.subreddit}`;
+  const context =
+    post.selftext && post.selftext.length > 20
+      ? post.selftext.slice(0, 220) + (post.selftext.length > 220 ? "..." : "")
+      : `Thread in ${subredditLabel} with ${score} upvotes and ${numComments} comments.`;
+  return {
+    id: Date.now(),
+    subreddit: subredditLabel,
+    title: post.title,
+    url,
+    age,
+    ageHours,
+    category,
+    categoryColor,
+    relevanceScore,
+    context,
+    opportunity: `This thread in ${subredditLabel} is an opportunity to connect the community with ZIGChain Summit 2026's focus on onchain capital, tokenized funds, and institutional-grade DeFi infrastructure.`,
+    suggestedReply: `This connects directly to what **ZIGChain Summit 2026** is addressing on April 28 in Dubai — onchain capital, tokenized funds, and institutional-grade financial infrastructure.\n\nSpeakers include executives from Swissquote MEA, Apex Group, and Taurus Group.\n\nFree virtual pass: https://summit.zigchain.com/2026`,
+    engagementPotential,
+    userAdded: true,
+  };
+}
+
+function buildConversationFromUrl(url: string, parsed: { subreddit: string; postId: string }): RedditConversation {
+  const slug = url.split("/").filter(Boolean).pop() ?? "";
+  const title = slug.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase()) || `Thread from r/${parsed.subreddit}`;
+  const { category, categoryColor } = detectCategory(parsed.subreddit, title);
+  return {
+    id: Date.now(),
+    subreddit: `r/${parsed.subreddit}`,
+    title,
+    url,
+    age: "recently added",
+    ageHours: 0,
+    category,
+    categoryColor,
+    relevanceScore: 5,
+    context: `User-added thread from r/${parsed.subreddit}.`,
+    opportunity: `This thread in r/${parsed.subreddit} may be an opportunity to highlight ZIGChain Summit 2026.`,
+    suggestedReply: `This is relevant to **ZIGChain Summit 2026** on April 28 in Dubai — focused on onchain capital and institutional DeFi. Free virtual pass: https://summit.zigchain.com/2026`,
+    engagementPotential: "Medium",
+    userAdded: true,
+  };
+}
 
 // ─── Sub-components ──────────────────────────────────────────────────────────
 
@@ -264,6 +358,11 @@ function ConversationCard({
             >
               {conv.engagementPotential} Engagement
             </span>
+            {conv.userAdded && (
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-[#4E30C6]/10 text-[#4E30C6] border border-[#4E30C6]/25 font-medium">
+                ✦ Added by you
+              </span>
+            )}
           </div>
           <span className="text-xs text-[#9CA3AF] whitespace-nowrap font-mono-custom flex-shrink-0">
             {conv.age}
@@ -476,6 +575,66 @@ function ArchiveSidebar({
   );
 }
 
+function AddConversationForm({ onAdd }: { onAdd: (conv: RedditConversation) => void }) {
+  const [url, setUrl] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState(false);
+
+  const handleAdd = async () => {
+    setError("");
+    setSuccess(false);
+    const trimmed = url.trim();
+    if (!trimmed) { setError("Please paste a Reddit URL."); return; }
+    const parsed = parseRedditUrl(trimmed);
+    if (!parsed) { setError("Please paste a valid Reddit thread URL (reddit.com/r/.../comments/...)."); return; }
+    setLoading(true);
+    try {
+      const post = await fetchRedditPost(parsed.subreddit, parsed.postId);
+      onAdd(buildConversationFromPost(post, trimmed));
+    } catch {
+      onAdd(buildConversationFromUrl(trimmed, parsed));
+    } finally {
+      setLoading(false);
+      setUrl("");
+      setSuccess(true);
+      setTimeout(() => setSuccess(false), 3000);
+    }
+  };
+
+  return (
+    <div className="bg-white border border-[#4E30C6]/10 rounded-xl p-4 shadow-sm">
+      <div className="flex items-center gap-2 mb-3">
+        <div className="p-1.5 rounded-lg bg-[#4E30C6]/10">
+          <Plus size={14} className="text-[#4E30C6]" />
+        </div>
+        <h3 className="font-display text-sm font-semibold text-[#1a1f35]">Add a Conversation</h3>
+        <span className="text-xs text-[#9CA3AF] ml-1">Paste a Reddit thread URL to generate a card</span>
+      </div>
+      <div className="flex gap-2">
+        <input
+          type="url"
+          placeholder="https://www.reddit.com/r/..."
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && !loading && handleAdd()}
+          className="flex-1 px-3 py-2 text-sm rounded-lg border border-[#4E30C6]/15 bg-[#F8F7FF] text-[#1a1f35] placeholder-[#9CA3AF] focus:outline-none focus:border-[#4E30C6]/40 focus:ring-1 focus:ring-[#4E30C6]/20 transition-colors"
+        />
+        <button
+          onClick={handleAdd}
+          disabled={loading}
+          className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#4E30C6] text-white text-sm font-medium hover:bg-[#3D25A8] disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+        >
+          {loading ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
+          {loading ? "Fetching…" : "Add"}
+        </button>
+      </div>
+      {error && <p className="text-red-500 text-xs mt-2">{error}</p>}
+      {success && <p className="text-emerald-600 text-xs mt-2">✓ Conversation added successfully!</p>}
+    </div>
+  );
+}
+
 // ─── Main Component ──────────────────────────────────────────────────────────
 
 export default function Home() {
@@ -483,13 +642,16 @@ export default function Home() {
   const [sortBy, setSortBy] = useState("Relevance");
   const [engaged, setEngaged] = useState<number[]>([]);
   const [archived, setArchived] = useState<number[]>([]);
+  const [customConversations, setCustomConversations] = useState<RedditConversation[]>([]);
 
   // Load from localStorage
   useEffect(() => {
     const savedEngaged = localStorage.getItem("zigchain-engaged");
     const savedArchived = localStorage.getItem("zigchain-archived");
+    const savedCustom = localStorage.getItem("zigchain-custom");
     if (savedEngaged) setEngaged(JSON.parse(savedEngaged));
     if (savedArchived) setArchived(JSON.parse(savedArchived));
+    if (savedCustom) setCustomConversations(JSON.parse(savedCustom));
   }, []);
 
   // Save to localStorage
@@ -501,8 +663,17 @@ export default function Home() {
     localStorage.setItem("zigchain-archived", JSON.stringify(archived));
   }, [archived]);
 
+  useEffect(() => {
+    localStorage.setItem("zigchain-custom", JSON.stringify(customConversations));
+  }, [customConversations]);
+
+  const allConversations = useMemo(
+    () => [...conversations, ...customConversations],
+    [customConversations]
+  );
+
   const filtered = useMemo(() => {
-    let result = conversations.filter(
+    let result = allConversations.filter(
       (c) => !engaged.includes(c.id) && !archived.includes(c.id)
     );
     if (filter !== "All") {
@@ -514,16 +685,16 @@ export default function Home() {
       result.sort((a, b) => b.relevanceScore - a.relevanceScore);
     }
     return result;
-  }, [filter, sortBy, engaged, archived]);
+  }, [filter, sortBy, engaged, archived, allConversations]);
 
   const engagedConversations = useMemo(
-    () => conversations.filter((c) => engaged.includes(c.id)),
-    [engaged]
+    () => allConversations.filter((c) => engaged.includes(c.id)),
+    [allConversations, engaged]
   );
 
   const archivedConversations = useMemo(
-    () => conversations.filter((c) => archived.includes(c.id)),
-    [archived]
+    () => allConversations.filter((c) => archived.includes(c.id)),
+    [allConversations, archived]
   );
 
   const chartData = useMemo(() => {
@@ -659,6 +830,11 @@ export default function Home() {
                 ))}
               </div>
             </div>
+
+            {/* Add Conversation */}
+            <AddConversationForm
+              onAdd={(conv) => setCustomConversations((prev) => [conv, ...prev])}
+            />
 
             {/* Conversations */}
             <div>
