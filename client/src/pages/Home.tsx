@@ -126,20 +126,21 @@ interface ClaudeAnalysis {
 }
 
 async function analyzeWithClaude(post: any, apiKey: string): Promise<ClaudeAnalysis> {
+  const hasBody = post.selftext && post.selftext.length > 20;
   const prompt = `You are an outreach intelligence assistant for ZIGChain Summit 2026 — a one-day summit on April 28, 2026 in Dubai, UAE. The summit is focused on onchain capital, tokenized real-world assets (RWA), institutional DeFi infrastructure, and wealth at scale. Key speakers include executives from Swissquote MEA, Apex Group, Taurus Group, and Laser Digital. The official site is https://summit.zigchain.com/2026 and a free virtual pass is available.
 
-Analyze this Reddit post and generate outreach intelligence:
+Analyze this Reddit post and generate outreach intelligence. ${!hasBody ? "Note: only the title is available — infer context from the title and subreddit." : ""}
 
 Subreddit: ${post.subreddit_name_prefixed ?? "r/" + post.subreddit}
 Title: ${post.title}
-Body: ${post.selftext ? post.selftext.slice(0, 1500) : "(link post — no body text)"}
+Body: ${hasBody ? post.selftext.slice(0, 1500) : "(no body text — link post or unavailable)"}
 Upvotes: ${post.score ?? 0} | Comments: ${post.num_comments ?? 0}
 
 Respond with ONLY a raw JSON object (no markdown, no code fences) with these exact fields:
 {
-  "context": "2-3 sentence summary of what the post is about and what the community is discussing",
-  "opportunity": "1-2 sentences explaining specifically why ZIGChain Summit 2026 is relevant to this thread",
-  "suggestedReply": "A natural, thoughtful Reddit reply that first adds genuine value to the conversation, then organically mentions ZIGChain Summit 2026. Should feel like a knowledgeable community member, not a marketer. 3-5 sentences.",
+  "context": "2-3 sentences describing what this post/thread is about and what discussion it likely contains, based on the title and subreddit",
+  "opportunity": "1-2 sentences explaining specifically how ZIGChain Summit 2026 is relevant to this thread and community",
+  "suggestedReply": "A natural, thoughtful Reddit reply (4-6 sentences) that first contributes something genuinely useful to the conversation based on the topic, then organically mentions ZIGChain Summit 2026 as relevant context. Never start with 'Great post' or generic openers. Sound like a knowledgeable community member, not a marketer.",
   "engagementPotential": "High" or "Moderate" or "Medium",
   "relevanceScore": a number from 1 to 10
 }`;
@@ -651,28 +652,45 @@ function AddConversationForm({ onAdd }: { onAdd: (conv: RedditConversation) => v
 
     setLoading(true);
     try {
+      // Try to fetch Reddit post — but don't bail if it fails
       setLoadingMsg("Fetching post…");
-      let post: any;
+      let post: any = null;
       try {
         post = await fetchRedditPost(parsed.subreddit, parsed.postId);
       } catch {
-        onAdd(buildConversationFromUrl(trimmed, parsed));
-        setUrl("");
-        setSuccess(true);
-        setTimeout(() => setSuccess(false), 3000);
-        return;
+        // CORS or network issue — we'll work with URL data only
       }
 
       if (apiKey.trim()) {
+        // Always call Claude when API key is set, even if Reddit fetch failed.
+        // Build a best-effort post object from whatever we have.
+        const slugTitle = parsed.postId
+          ? (trimmed.split("/").filter(Boolean).pop() ?? "").replace(/_/g, " ")
+          : "";
+        const postData = post ?? {
+          title: slugTitle || `Thread from r/${parsed.subreddit}`,
+          selftext: "",
+          subreddit: parsed.subreddit,
+          subreddit_name_prefixed: `r/${parsed.subreddit}`,
+          score: 0,
+          num_comments: 0,
+          created_utc: Date.now() / 1000,
+        };
+
         setLoadingMsg("Analyzing with Claude…");
         try {
-          const analysis = await analyzeWithClaude(post, apiKey.trim());
-          const { age, ageHours } = formatAge(post.created_utc);
-          const { category, categoryColor } = detectCategory(post.subreddit ?? "", post.title ?? "");
+          const analysis = await analyzeWithClaude(postData, apiKey.trim());
+          const { age, ageHours } = post
+            ? formatAge(post.created_utc)
+            : { age: "recently added", ageHours: 0 };
+          const { category, categoryColor } = detectCategory(
+            postData.subreddit ?? "",
+            postData.title ?? ""
+          );
           onAdd({
             id: Date.now(),
-            subreddit: post.subreddit_name_prefixed ?? `r/${post.subreddit}`,
-            title: post.title,
+            subreddit: postData.subreddit_name_prefixed ?? `r/${postData.subreddit}`,
+            title: postData.title,
             url: trimmed,
             age,
             ageHours,
@@ -687,10 +705,11 @@ function AddConversationForm({ onAdd }: { onAdd: (conv: RedditConversation) => v
           });
         } catch (aiErr: any) {
           setError(`Claude API error: ${aiErr.message}. Card added with basic analysis.`);
-          onAdd(buildConversationFromPost(post, trimmed));
+          onAdd(post ? buildConversationFromPost(post, trimmed) : buildConversationFromUrl(trimmed, parsed));
         }
       } else {
-        onAdd(buildConversationFromPost(post, trimmed));
+        // No API key — use template
+        onAdd(post ? buildConversationFromPost(post, trimmed) : buildConversationFromUrl(trimmed, parsed));
       }
 
       setUrl("");
